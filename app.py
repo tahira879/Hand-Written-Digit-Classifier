@@ -1,76 +1,125 @@
 import streamlit as st
-from streamlit_drawable_canvas import st_canvas
 import numpy as np
-from PIL import Image
 import tensorflow as tf
+from streamlit_drawable_canvas import st_canvas
+from PIL import Image, ImageOps
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="AI Digit Classifier", layout="centered")
+st.set_page_config(page_title="TensorFlow Digit Recognizer", layout="wide")
 
-# --- CUSTOM DARK THEME CSS ---
+# --- CUSTOM CSS (Premium Dark Mode) ---
 st.markdown("""
     <style>
-    /* Midnight Charcoal Background */
-    .stApp { background-color: #0d1117; color: #e6edf3; }
+    .stApp { background-color: #0E1117; color: #FFFFFF; }
+    section[data-testid="stSidebar"] { background-color: #161B22; border-right: 1px solid #30363d; }
     
-    /* Beautiful Heading Container */
-    .header-box {
-        background: linear-gradient(135deg, #1f2937, #111827);
-        padding: 20px;
+    /* Neon Border for Canvas */
+    .canvas-border {
+        border: 2px solid #00F2FF;
         border-radius: 15px;
-        border: 1px solid #3b82f6;
-        text-align: center;
-        box-shadow: 0px 4px 15px rgba(59, 130, 246, 0.3);
-        margin-bottom: 20px;
+        box-shadow: 0px 0px 20px rgba(0, 242, 255, 0.2);
+        padding: 10px;
+        background-color: #1E1E1E;
+        display: inline-block;
     }
     
-    /* Button Styling */
-    div.stButton > button {
-        background-color: #2563eb;
+    /* Recognition Button Styling */
+    div.stButton > button:first-child {
+        background-color: #007BFF;
         color: white;
         border: none;
         border-radius: 8px;
-        padding: 10px 20px;
+        height: 3em;
         font-weight: bold;
+        width: 100%;
     }
-    div.stButton > button:hover { background-color: #1d4ed8; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- UI LAYOUT ---
-st.markdown("<div class='header-box'><h1>🎨 AI Digit Classifier</h1><p>Draw a number below</p></div>", unsafe_allow_html=True)
+# --- LOAD MODEL ---
+@st.cache_resource
+def load_my_model():
+    try:
+        return tf.keras.models.load_model('digit_model.h5')
+    except:
+        st.error("Model 'digit_model.h5' not found. Please run the training script first!")
+        return None
 
-# --- CANVAS ---
-# Tooling is built into the component for pen/eraser/color
-col1, col2 = st.columns([1, 1])
+model = load_my_model()
+
+# --- SIDEBAR: TOOLKIT ---
+with st.sidebar:
+    st.title("Controls")
+    
+    # Brush Palette
+    st.subheader("🎨 Palette")
+    stroke_color = st.color_picker("Pick Pencil Color", "#00F2FF")
+    
+    # Tool Selection (Pencil vs Eraser)
+    tool_mode = st.radio("Tool", ("Pencil", "Eraser"))
+    stroke_width = st.slider("Brush Thickness", 5, 50, 20)
+    
+    # Logic: Eraser simply paints the background color
+    final_stroke_color = "#1E1E1E" if tool_mode == "Eraser" else stroke_color
+
+    st.markdown("---")
+    if st.button("🗑️ Clear Canvas", use_container_width=True):
+        st.rerun()
+
+# --- MAIN LAYOUT ---
+st.title("TensorFlow Digit Recognizer")
+
+col1, col2 = st.columns([1.5, 1], gap="large")
 
 with col1:
+    st.write("### Minimalist Canvas")
+    
+    # Visualizing the Canvas with the border
+    st.markdown('<div class="canvas-border">', unsafe_allow_html=True)
     canvas_result = st_canvas(
-        fill_color="#000000",
-        stroke_width=15,
-        stroke_color="#FFFFFF",
-        background_color="#000000",
-        height=280,
-        width=280,
+        fill_color="rgba(255, 255, 255, 0)",
+        stroke_width=stroke_width,
+        stroke_color=final_stroke_color,
+        background_color="#1E1E1E",
+        height=400,
+        width=400,
         drawing_mode="freedraw",
         key="canvas",
     )
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# --- INFERENCE ---
 with col2:
-    st.write("### Controls")
-    if st.button("Predict Digit"):
-        if canvas_result.image_data is not None:
-            # Pre-processing for MNIST models
-            img = Image.fromarray(canvas_result.image_data.astype('uint8')).convert('L')
-            img = img.resize((28, 28))
-            img_array = np.array(img).reshape(1, 28, 28) / 255.0
-            
-            # Placeholder for your model
-            # model = tf.keras.models.load_model('mnist_model.h5')
-            # pred = model.predict(img_array)
-            # st.success(f"Detected: {np.argmax(pred)}")
-            st.info("Model not loaded yet. Add your .h5 file!")
+    st.write("### Live Prediction Model")
+    
+    # Process image only if user has drawn something
+    if canvas_result.image_data is not None and np.any(canvas_result.image_data > 0):
+        # 1. Image Preprocessing
+        # Convert to Grayscale
+        img = Image.fromarray(canvas_result.image_data.astype('uint8')).convert('L')
+        # Resize to 28x28 (Matching MNIST/Kaggle size)
+        img = img.resize((28, 28))
+        img_array = np.array(img) / 255.0
+        img_array = img_array.reshape(1, 28, 28, 1)
 
-    if st.button("Clear Canvas"):
-        st.rerun()
+        if model:
+            # 2. Prediction
+            prediction = model.predict(img_array)
+            res = np.argmax(prediction)
+            prob = np.max(prediction)
+
+            # 3. Dynamic UI Update
+            st.metric(label="Predicted Digit", value=res, delta=f"{prob*100:.2f}% Confidence")
+            
+            # Show Probability bars for all digits
+            for i in range(10):
+                p_val = float(prediction[0][i])
+                # Highlight the top guess with the user's chosen color
+                bar_color = stroke_color if i == res else "#333"
+                st.write(f"Digit {i}")
+                st.progress(p_val)
+    else:
+        st.info("Draw a digit on the canvas to see the AI analysis.")
+
+# --- FOOTER ---
+st.markdown("---")
+st.caption("Custom Build | Powered by TensorFlow & Streamlit")
