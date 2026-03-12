@@ -1,3 +1,13 @@
+Here is the **Simple & Professional** version.
+
+### How to use this:
+1.  Ensure your file is named exactly: **`mnist_dataset (1).csv`**.
+2.  Place the CSV file in the **same folder** as this Python script.
+3.  Run the app. It will automatically load the data and train the model in the background without any upload buttons.
+
+### The Python Code (`app.py`)
+
+```python
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -7,274 +17,192 @@ from tensorflow.keras import layers, models
 import plotly.graph_objects as go
 import os
 
-# ── PAGE CONFIG & THEME ──
+# ── CONFIGURATION ──
+CSV_PATH = "mnist_dataset (1).csv"  # Assumes file is in the same directory
+
 st.set_page_config(page_title="Digit Classifier", page_icon="✏️", layout="wide")
 
-# Custom CSS for Dark Theme & White Text
+# Professional Dark Theme CSS
 st.markdown("""
 <style>
-    /* Main Background & Text */
-    .stApp {
-        background-color: #0f0f1a;
-        color: #ffffff;
+    .stApp { background-color: #0b0c15; color: #e2e8f0; }
+    h1, h2, h3, p, div, span, label { color: #e2e8f0 !important; font-family: 'Inter', sans-serif; }
+    
+    /* Clean Card Layout */
+    .main-card {
+        background-color: #151725; border: 1px solid #2d3748; border-radius: 12px; padding: 24px; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     
-    /* General Text Overrides */
-    h1, h2, h3, h4, h5, h6, p, div, span, label {
-        color: #ffffff !important;
+    /* Status Indicator */
+    .status-badge {
+        display: inline-block; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; margin-bottom: 20px;
+        background-color: #2d3748; color: #a0aec0;
+    }
+    .status-badge.ready { background-color: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid #059669; }
+
+    /* Canvas Wrapper */
+    .canvas-box { background: white; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+    
+    /* Prediction Display */
+    .result-digit { 
+        font-size: 5rem; font-weight: 800; line-height: 1; 
+        background: linear-gradient(135deg, #6366f1, #a855f7); 
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; 
     }
     
-    /* Card Container Style */
-    .card {
-        background-color: #1a1a2e;
-        border: 1px solid #2d2d4e;
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    }
-
-    /* Step Badge */
-    .step-badge {
-        background: linear-gradient(135deg, #667eea, #764ba2);
-        color: white;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.8rem;
-        font-weight: bold;
-        margin-right: 10px;
-        vertical-align: middle;
-    }
-
-    /* Button Styling */
+    /* Buttons */
     .stButton > button {
-        background-color: #667eea;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
-        transition: all 0.3s;
+        width: 100%; border-radius: 8px; font-weight: 600; padding: 0.75rem; border: none; margin-top: 10px;
     }
-    .stButton > button:hover {
-        background-color: #764ba2;
-        transform: translateY(-1px);
-    }
-    
-    /* File Uploader Text */
-    [data-testid="stFileUploader"] {
-        color: white !important;
-    }
-    [data-testid="stFileUploader"] label {
-        color: #b0b0d0 !important;
-    }
-
-    /* Slider Color */
-    .stSlider > div > div > div {
-        background-color: #667eea !important;
-    }
-
-    /* Canvas Container */
-    .canvas-container {
-        border: 2px solid #2d2d4e;
-        border-radius: 12px;
-        background: white;
-        overflow: hidden;
-    }
-    
-    /* Prediction Box */
-    .pred-box {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
-        border: 2px solid #667eea;
-        border-radius: 16px;
-        padding: 20px;
-        text-align: center;
-    }
-    .digit {
-        font-size: 4rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #667eea, #f093fb);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
+    .btn-primary { background-color: #6366f1; color: white; }
+    .btn-secondary { background-color: #2d3748; color: white; }
+    .stButton > button:hover { opacity: 0.9; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── SESSION STATE ──
-if 'model' not in st.session_state:
-    st.session_state.model = None
-if 'model_trained' not in st.session_state:
-    st.session_state.model_trained = False
-if 'accuracy' not in st.session_state:
-    st.session_state.accuracy = 0.0
-
-# ── HEADER ──
-st.markdown("<h1 style='text-align: center;'>✏️ AI Digit Classifier</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #b0b0d0;'>Train a model on your CSV • Draw a digit • See the magic</p>", unsafe_allow_html=True)
-
-# ── STEP 1: TRAINING SECTION ──
-st.markdown("<div class='card'>", unsafe_allow_html=True)
-st.markdown("<span class='step-badge'>STEP 1</span> <h3 style='display:inline;'>Train the Model</h3>", unsafe_allow_html=True)
-
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    uploaded_file = st.file_uploader("Upload `mnist_dataset (1).csv`", type=["csv"])
+# ── DATA LOADING & TRAINING (Backend Logic) ──
+@st.cache_resource
+def load_data_and_train():
+    """Loads CSV and trains the model automatically on startup."""
     
-    if uploaded_file is not None:
-        # Read CSV to check structure (assume label is first column)
-        df = pd.read_csv(uploaded_file)
-        st.write(f"📊 **Dataset Loaded:** {df.shape[0]} rows, {df.shape[1]} columns")
-        
-        if st.button("🚀 Start Training", use_container_width=True):
-            with st.spinner("Training model... This may take a minute."):
-                # 1. Preprocess Data
-                # Assumes first column is label, rest are pixels
-                y = df.iloc[:, 0].values
-                X = df.iloc[:, 1:].values.astype('float32') / 255.0
-                X = X.reshape(-1, 28, 28, 1)
+    # 1. Check File
+    if not os.path.exists(CSV_PATH):
+        return None, f"Error: File '{CSV_PATH}' not found. Please place it in the app directory."
 
-                # 2. Split Data (Simple 80/20 split)
-                split = int(len(X) * 0.8)
-                X_train, X_val = X[:split], X[split:]
-                y_train, y_val = y[:split], y[split:]
-
-                # 3. Define CNN Model
-                model = models.Sequential([
-                    layers.Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)),
-                    layers.MaxPooling2D((2, 2)),
-                    layers.Conv2D(64, (3, 3), activation='relu'),
-                    layers.MaxPooling2D((2, 2)),
-                    layers.Flatten(),
-                    layers.Dense(64, activation='relu'),
-                    layers.Dense(10, activation='softmax')
-                ])
-
-                model.compile(optimizer='adam',
-                              loss='sparse_categorical_crossentropy',
-                              metrics=['accuracy'])
-
-                # 4. Train
-                # Using a small number of epochs for speed in the demo
-                history = model.fit(X_train, y_train, epochs=5, 
-                                    validation_data=(X_val, y_val), verbose=0)
-                
-                # 5. Save to Session State
-                st.session_state.model = model
-                st.session_state.model_trained = True
-                val_acc = history.history['val_accuracy'][-1]
-                st.session_state.accuracy = f"{val_acc*100:.2f}%"
-                
-                st.success(f"Training Complete! Validation Accuracy: {st.session_state.accuracy}")
-                st.rerun()
-
-with col2:
-    if st.session_state.model_trained:
-        st.info("✅ **Model Ready!** \n\nProceed to Step 2 to draw and predict.")
-    else:
-        st.warning("⚠️ **Waiting for model...** \n\nPlease upload a CSV file and click Train.")
-
-st.markdown("</div>", unsafe_allow_html=True)
-
-# ── STEP 2: DRAW & PREDICT SECTION ──
-# Only show if model is trained
-if st.session_state.model_trained:
-    st.markdown("<div class='card'>", unsafe_allow_html=True)
-    st.markdown("<span class='step-badge'>STEP 2</span> <h3 style='display:inline;'>Draw & Predict</h3>", unsafe_allow_html=True)
-
-    # Import canvas component
-    from streamlit_drawable_canvas import st_canvas
-
-    col_draw, col_res = st.columns([1, 1])
-
-    with col_draw:
-        st.markdown("**Canvas**")
-        canvas_result = st_canvas(
-            fill_color="rgba(255, 255, 255, 0)",
-            stroke_width=20,
-            stroke_color="#000000", # Black ink
-            background_color="#FFFFFF", # White paper
-            height=280,
-            width=280,
-            drawing_mode="freedraw",
-            key="canvas",
-        )
-        
-        if st.button("🔮 Predict Digit", use_container_width=True):
-            if canvas_result.image_data is not None:
-                # Process Image
-                img_data = canvas_result.image_data
-                # Convert RGBA to Grayscale PIL Image
-                pil_img = Image.fromarray(img_data.astype('uint8'), 'RGBA').convert('L')
-                
-                # Resize to 28x28
-                pil_img = pil_img.resize((28, 28), Image.LANCZOS)
-                
-                # Convert to numpy array
-                img_array = np.array(pil_img)
-                
-                # Invert colors (MNIST is white on black, canvas is black on white)
-                img_array = 255.0 - img_array
-                
-                # Normalize and reshape
-                img_input = img_array.astype('float32') / 255.0
-                img_input = img_input.reshape(1, 28, 28, 1)
-
-                # Predict
-                model = st.session_state.model
-                prediction = model.predict(img_input, verbose=0)
-                predicted_digit = int(np.argmax(prediction))
-                confidence = float(np.max(prediction)) * 100
-                
-                # Store results in session state to display in other column
-                st.session_state.pred_digit = predicted_digit
-                st.session_state.pred_conf = confidence
-                st.session_state.probs = prediction[0]
-
-    with col_res:
-        st.markdown("**Result**")
-        
-        if 'pred_digit' in st.session_state:
-            # Display big number
-            st.markdown(f"""
-            <div class="pred-box">
-                <div style="font-size: 0.9rem; color: #b0b0d0; margin-bottom: 5px;">PREDICTED DIGIT</div>
-                <div class="digit">{st.session_state.pred_digit}</div>
-                <div style="font-size: 1.2rem; color: #a78bfa; margin-top: 5px;">
-                    {st.session_state.pred_conf:.1f}% Confidence
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+    with st.spinner("Loading dataset and training model... (This runs once)"):
+        try:
+            # Load Data
+            df = pd.read_csv(CSV_PATH)
             
-            # Plotly Chart
-            probs = st.session_state.probs
-            colors = ["#f093fb" if i == st.session_state.pred_digit else "#667eea" for i in range(10)]
-            
-            fig = go.Figure(data=[
-                go.Bar(x=list(range(10)), y=probs, marker_color=colors, text=[f"{p:.2f}" for p in probs], textposition='outside')
+            # Preprocess (Assumes Col 0 is Label)
+            y = df.iloc[:, 0].values
+            X = df.iloc[:, 1:].values.astype('float32') / 255.0
+            X = X.reshape(-1, 28, 28, 1)
+
+            # Train/Val Split
+            split = int(len(X) * 0.9) # Use 90% for train for speed
+            X_train, X_val = X[:split], X[split:]
+            y_train, y_val = y[:split], y[split:]
+
+            # Model Architecture (Optimized for accuracy)
+            model = models.Sequential([
+                layers.Conv2D(32, (3,3), activation='relu', input_shape=(28,28,1), padding='same'),
+                layers.MaxPooling2D((2,2)),
+                layers.Conv2D(64, (3,3), activation='relu', padding='same'),
+                layers.MaxPooling2D((2,2)),
+                layers.Flatten(),
+                layers.Dense(128, activation='relu'),
+                layers.Dropout(0.5),
+                layers.Dense(10, activation='softmax')
             ])
-            fig.update_layout(
-                plot_bgcolor="#1a1a2e",
-                paper_bgcolor="#1a1a2e",
-                font=dict(color="#ffffff"),
-                margin=dict(l=0, r=0, t=0, b=0),
-                xaxis=dict(showgrid=False, color="#b0b0d0"),
-                yaxis=dict(showgrid=True, gridcolor="#2d2d4e", color="#b0b0d0", range=[0, 1]),
-                height=250
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        else:
-            st.markdown("""
-            <div class="pred-box" style="opacity: 0.5;">
-                <div style="font-size: 4rem;">?</div>
-                <div style="color: #b0b0d0; margin-top: 10px;">Draw on the canvas and click Predict</div>
-            </div>
-            """, unsafe_allow_html=True)
 
+            model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+            
+            # Train
+            model.fit(X_train, y_train, epochs=10, validation_data=(X_val, y_val), verbose=0)
+            
+            return model, "Ready"
+
+        except Exception as e:
+            return None, f"Error processing data: {str(e)}"
+
+# Initialize Model
+model, status_msg = load_data_and_train()
+
+# ── UI LAYOUT ──
+# Header
+st.markdown("<h1 style='text-align: center; margin-bottom: 0.5rem;'>✏️ Professional Digit Classifier</h1>", unsafe_allow_html=True)
+
+# Status Bar
+status_color = "ready" if model else ""
+st.markdown(f"<div class='status-badge {status_color}'>📊 Status: {status_msg}</div>", unsafe_allow_html=True)
+
+if not model:
+    st.stop() # Stop if model failed to load
+
+# Main Workspace
+col_left, col_right = st.columns([1, 1], gap="large")
+
+with col_left:
+    st.markdown("<div class='main-card'>", unsafe_allow_html=True)
+    st.markdown("### 🎨 Draw Digit")
+    
+    from streamlit_drawable_canvas import st_canvas
+    
+    # Canvas
+    canvas_result = st_canvas(
+        fill_color="rgba(255, 255, 255, 0)",
+        stroke_width=25,
+        stroke_color="#000000",
+        background_color="#FFFFFF",
+        height=300,
+        width=300,
+        drawing_mode="freedraw",
+        key="canvas_main"
+    )
+    
+    # Controls
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Clear Canvas", use_container_width=True):
+            st.rerun()
+    with c2:
+        predict_btn = st.button("Predict", use_container_width=True, type="primary")
+        
     st.markdown("</div>", unsafe_allow_html=True)
 
-else:
-    # Placeholder when not trained
-    st.markdown("<div class='card' style='text-align:center; opacity:0.5;'>", unsafe_allow_html=True)
-    st.markdown("### 🎨 Drawing Canvas Locked")
-    st.markdown("Complete **Step 1** to unlock this section.")
+with col_right:
+    st.markdown("<div class='main-card'>", unsafe_allow_html=True)
+    st.markdown("### 🤖 Prediction")
+    
+    if predict_btn and canvas_result.image_data is not None:
+        # 1. Convert to Grayscale & Resize
+        pil_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA').convert('L')
+        pil_img = pil_img.resize((28, 28), Image.LANCZOS)
+        img_array = np.array(pil_img)
+        
+        # 2. CRITICAL: Thresholding (Remove gray blur)
+        # Makes edges sharp like MNIST data
+        img_array = (img_array > 200).astype('float32') * 255
+        
+        # 3. Invert (White text on black background)
+        img_array = 255.0 - img_array
+        
+        # 4. Normalize & Predict
+        img_input = img_array.astype('float32') / 255.0
+        img_input = img_input.reshape(1, 28, 28, 1)
+        
+        prediction = model.predict(img_input, verbose=0)
+        digit = int(np.argmax(prediction))
+        conf = float(np.max(prediction)) * 100
+        
+        # Display Results
+        st.markdown(f"""
+        <div style='text-align: center;'>
+            <div style='font-size: 0.9rem; color: #a0aec0; margin-bottom: 5px;'>PREDICTED DIGIT</div>
+            <div class='result-digit'>{digit}</div>
+            <div style='font-size: 1.2rem; color: #a855f7; margin-top: 10px;'>{conf:.1f}% Confidence</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Debug View (Optional but professional)
+        with st.expander("Debug: What the model sees"):
+            st.caption("If this 28x28 image doesn't look like your drawing, the prediction may be wrong.")
+            st.image(img_array, width=100)
+            
+        # Chart
+        probs = prediction[0]
+        colors = ["#a855f7" if i == digit else "#2d3748" for i in range(10)]
+        fig = go.Figure(data=[go.Bar(x=list(range(10)), y=probs, marker_color=colors)])
+        fig.update_layout(
+            plot_bgcolor="#151725", paper_bgcolor="#151725", margin=dict(l=0, r=0, t=20, b=0),
+            font=dict(color="#a0aec0"), showlegend=False,
+            xaxis=dict(showgrid=False), yaxis=dict(showgrid=False, range=[0,1])
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        
+    else:
+        st.markdown("<div style='text-align:center; color: #4a5568; padding: 40px;'>Draw on the canvas and click Predict</div>", unsafe_allow_html=True)
+
     st.markdown("</div>", unsafe_allow_html=True)
+```
