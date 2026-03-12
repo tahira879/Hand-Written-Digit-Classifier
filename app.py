@@ -21,27 +21,29 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. Sidebar: Debugging & Settings ---
+# --- 2. Sidebar Settings ---
 st.sidebar.header("⚙️ Settings")
 
-# Invert Training Data Checkbox (Agar CSV mein Black digit hai, toh ye ON karein)
-invert_training_data = st.sidebar.checkbox("Invert Training Data (Black Digit Fix)", value=False, help="Agar CSV mein images Black on White hain, toh ye tick karein.")
+# Invert Checkbox (Default False rakha hai, standard MNIST ke liye)
+invert_training_data = st.sidebar.checkbox("Invert Training Data (If Preview looks wrong)", value=False, help="Tick karein agar preview mein 'Kala' (Black) digit dikh raha hai.")
 
 # --- 3. Model Logic ---
-MODEL_PATH = 'mnist_debug_model.h5'
+MODEL_PATH = 'mnist_final_model.h5'
 ZIP_FILE = 'train.csv.zip'
 
 @st.cache_resource
 def get_model():
+    # 1. Check Saved Model
     if os.path.exists(MODEL_PATH):
-        return tf.keras.models.load_model(MODEL_PATH), None # Return None for sample image if loaded
+        return tf.keras.models.load_model(MODEL_PATH), None
 
     if not os.path.exists(ZIP_FILE):
-        st.error(f"❌ '{ZIP_FILE}' nahi mili.")
+        st.error(f"❌ '{ZIP_FILE}' nahi mili!")
         return None, None
 
-    with st.spinner(f"⏳ Processing {ZIP_FILE} & Training..."):
+    with st.spinner(f"⏳ Loading {ZIP_FILE} & Training..."):
         try:
+            # Open Zip
             with zipfile.ZipFile(ZIP_FILE, 'r') as z:
                 file_list = z.namelist()
                 csv_file_name = next((f for f in file_list if f.endswith('.csv')), None)
@@ -50,36 +52,38 @@ def get_model():
                     st.error("ZIP mein CSV nahi mili.")
                     return None, None
 
+                # READ CSV
                 with z.open(csv_file_name) as f:
-                    # IMPORTANT: header=None maan rahe hain. Agar headings hain toh ye shayad galat lega,
-                    # lekin hum preview se check karenge.
-                    df = pd.read_csv(f, header=None) 
+                    # FIX: header=0 use kiya hai (default), taaki first row (headings) skip ho jaye
+                    df = pd.read_csv(f, header=0) 
 
-            # Data Separation
-            # Assume: Col 0 = Label, Col 1... = Pixels
+            # 2. Data Prep
+            # 0th col = Label, Baaki = Pixels
+            # Saari values ko float mein convert karein
+            df = df.astype('float32')
+            
             y_data = df.iloc[:, 0].values
             x_data = df.iloc[:, 1:].values 
 
-            # --- FIX 1: Invert Logic (If User Selected) ---
-            # Agar CSV Black/White hai (Digit=0, BG=255), aur model White/Black chahiye, toh invert karein.
+            # FIX: Invert Logic
             if invert_training_data:
                 x_data = 255 - x_data
 
             # Reshape
             x_data = x_data.reshape(-1, 28, 28, 1)
             
-            # Save 1 Sample for Sidebar Preview
+            # Save Sample for Preview
             sample_img = x_data[0].reshape(28, 28)
 
-            # Normalize
+            # Normalize (0-1)
             x_data = x_data / 255.0
 
-            # Train/Test Split
+            # 3. Train/Test Split
             split = int(0.8 * len(x_data))
             x_train, x_test = x_data[:split], x_data[split:]
             y_train, y_test = y_data[:split], y_data[split:]
 
-            # Model
+            # 4. CNN Model
             model = models.Sequential([
                 layers.Conv2D(32, (3, 3), activation='relu', input_shape=(28, 28, 1)),
                 layers.MaxPooling2D((2, 2)),
@@ -91,10 +95,13 @@ def get_model():
             ])
 
             model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
-            model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test), verbose=0)
             
+            # Train (8 epochs for better accuracy)
+            model.fit(x_train, y_train, epochs=8, validation_data=(x_test, y_test), verbose=0)
+            
+            # Save
             model.save(MODEL_PATH)
-            st.success("✅ Model Train & Save ho gaya!")
+            st.success("✅ Model Successfully Trained!")
             
             return model, sample_img
             
@@ -105,20 +112,17 @@ def get_model():
 # Load Model
 model, sample_img = get_model()
 
-# --- SIDEBAR: PREVIEW (Important for Debugging) ---
-st.sidebar.subheader("🔍 Training Data Check")
-if model is not None:
-    st.sidebar.write("Is image mein digit saaf dikh raha hai?")
-    if sample_img is not None:
-        # Display the first image from your CSV
-        st.sidebar.image(sample_img, width=150, clamp=True)
+# --- SIDEBAR: DEBUG PREVIEW ---
+st.sidebar.subheader("🔍 Preview (1st Image from CSV)")
+if model is not None and sample_img is not None:
+    st.sidebar.image(sample_img, width=150, clamp=True, caption="Yeh training image sahi hai?")
+    if invert_training_data:
+        st.sidebar.caption("Invert: ON (Black Digit Fix)")
     else:
-        st.sidebar.caption("(Model purana load hua hai, preview nahi dikhega)")
-    
-    st.sidebar.caption("Agar yeh image 'kala' (black) hai aur background 'safed' (white), toh upar 'Invert Training Data' ko tick karein aur model delete karke wapas run karein.")
+        st.sidebar.caption("Invert: OFF (Standard)")
 
-# --- 4. Main App ---
-st.title("🖊️ Handwritten Digit Classifier")
+# --- 4. Main UI ---
+st.title("🖊️ Digit Classifier (train.csv.zip)")
 
 col1, col2 = st.columns([2, 1])
 
@@ -126,8 +130,8 @@ with col1:
     st.subheader("✏️ Canvas")
     canvas_result = canvas.st_canvas(
         fill_color="#ffffff",
-        stroke_width=12,
-        stroke_color="#000000", # Default Black
+        stroke_width=15, # Thodi moti pencil
+        stroke_color="#000000",
         background_color="#ffffff",
         drawing_mode="freedraw",
         key="canvas_main"
@@ -142,21 +146,21 @@ st.markdown("---")
 
 if st.button("🚀 PREDICT", type="primary"):
     if model is None:
-        st.error("Model load nahi hui.")
+        st.error("Model load nahi hui. ZIP file check karein.")
     elif canvas_result.image_data is not None:
         with st.spinner("Analyzing..."):
-            # Image Processing
+            # Process Drawing
             img_data = canvas_result.image_data
             img = Image.fromarray(img_data.astype('uint8'), 'RGBA')
             img = img.convert('L').resize((28, 28))
             img_array = np.array(img)
             
-            # Invert (Canvas Black/White -> Model White/Black)
+            # Invert (Drawing Black/White -> Model White/Black)
             img_array = 255 - img_array 
             img_array = img_array / 255.0
             
-            # Thresholding
-            img_array = (img_array > 0.4).astype('float32')
+            # Thresholding (Clean edges)
+            img_array = (img_array > 0.3).astype('float32') # 0.3 thoda sensitive rakha hai
             
             img_input = img_array.reshape(1, 28, 28, 1)
             
@@ -167,6 +171,7 @@ if st.button("🚀 PREDICT", type="primary"):
             metric_placeholder.metric("Detected", int(digit))
             conf_placeholder.write(f"Confidence: {conf*100:.2f}%")
 
+            # Table
             df = pd.DataFrame({'Digit': range(10), 'Probability': (prediction[0] * 100).round(2)})
             st.dataframe(df, use_container_width=True)
             st.bar_chart(df.set_index('Digit'))
