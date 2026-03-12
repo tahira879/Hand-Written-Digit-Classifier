@@ -4,3 +4,6 @@ numpy
 pillow
 tensorflow-cpu
 plotly
+matplotlib
+seaborn
+zipfile
