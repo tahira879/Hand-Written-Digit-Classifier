@@ -26,7 +26,7 @@ st.markdown("""
 
 # --- 2. Sidebar Settings ---
 st.sidebar.header("⚙️ Settings")
-st.sidebar.warning("Agar prediction galat hai, toh 'Invert' ko change karke model delete karein aur wapas run karein.")
+st.sidebar.warning("If the prediction is incorrect, change the 'Invert' setting, delete the model, and run it again.")
 
 invert_training_data = st.sidebar.checkbox("Invert Training Data (Fix Black Digits)", value=False)
 
@@ -101,7 +101,7 @@ model, sample_img = get_model()
 st.sidebar.subheader("📊 Training Data Preview")
 if sample_img is not None:
     st.sidebar.image(sample_img, width=120, caption="CSV ka 1st Image (Centered)")
-    st.sidebar.caption("Yeh White digit hona chahiye.")
+    #st.sidebar.caption("Yeh White digit hona chahiye.")
 
 # --- 4. Main UI ---
 st.title("🔍 Visual Debug Dashboard")
@@ -122,8 +122,8 @@ with col1:
     )
 
 with col2:
-    st.subheader("2. Model Input (28x28)")
-    st.caption("Yeh wo image hai jo model ko mil rahi hai.")
+    st.subheader("2. Model Input")
+    st.caption("This is the image that the model is receiving.")
     model_view_placeholder = st.empty()
 
 with col3:
@@ -136,7 +136,7 @@ st.markdown("---")
 
 if st.button("🚀 PREDICT & DEBUG", type="primary"):
     if model is None:
-        st.error("Model load nahi hui.")
+        st.error("Model failed to load.")
     elif canvas_result.image_data is not None:
         with st.spinner("Analyzing..."):
             # --- PROCESS DRAWING ---
@@ -171,9 +171,9 @@ if st.button("🚀 PREDICT & DEBUG", type="primary"):
             
             # Diagnostic Message
             if conf > 0.8:
-                status_placeholder.success("Model sure hai.")
+                status_placeholder.success("The model is confident.")
             else:
-                status_placeholder.warning("Model confuse hai. Check 'Model View'.")
+                status_placeholder.warning("The model is confused. Check 'Model View'.")
 
             # --- COMPARISON CHECK ---
             st.subheader("🔎 Comparison Check")
@@ -185,10 +185,10 @@ if st.button("🚀 PREDICT & DEBUG", type="primary"):
                 st.write("**What Model Sees (Processed)**")
                 st.image(display_img, width=150, clamp=True)
 
-            st.info("💡 **Tip:** Agar 'What Model Sees' mein **Black** digit hai, toh Sidebar mein **'Invert Training Data'** ko tick karein, model delete karein aur restart karein.")
+            #st.info("💡 **Tip:** Agar 'What Model Sees' mein **Black** digit hai, toh Sidebar mein **'Invert Training Data'** ko tick karein, model delete karein aur restart karein.")
 
     else:
-        st.error("Pehle draw karein!")
+        st.error("Draw something first!")
 
 if st.button("🗑️ Clear"):
     st.rerun()
