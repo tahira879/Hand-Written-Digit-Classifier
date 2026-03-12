@@ -1,13 +1,6 @@
-Here is the **Simple & Professional** version.
 
-### How to use this:
-1.  Ensure your file is named exactly: **`mnist_dataset (1).csv`**.
-2.  Place the CSV file in the **same folder** as this Python script.
-3.  Run the app. It will automatically load the data and train the model in the background without any upload buttons.
 
-### The Python Code (`app.py`)
 
-```python
 import streamlit as st
 import numpy as np
 import pandas as pd
@@ -205,4 +198,3 @@ with col_right:
         st.markdown("<div style='text-align:center; color: #4a5568; padding: 40px;'>Draw on the canvas and click Predict</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
-```
