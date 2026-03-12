@@ -6,6 +6,7 @@ from PIL import Image
 import tensorflow as tf
 from tensorflow.keras import layers, models
 import os
+import zipfile # Zip file handle karne ke liye
 
 # --- 1. Premium Dashboard Config ---
 st.set_page_config(
@@ -25,39 +26,51 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. AI Model Logic (Load CSV & Train) ---
-MODEL_PATH = 'mnist_csv_model.h5'
-CSV_FILE = 'mnist_dataset (1).csv' # Aapki file ka naam
+# --- 2. AI Model Logic (Load ZIP -> CSV -> Train) ---
+MODEL_PATH = 'mnist_zip_model.h5'
+ZIP_FILE = 'train.csv.zip' # Aapki zip file ka naam
 
 @st.cache_resource
 def get_model():
-    # 1. Check agar model pehle se save hai
+    # 1. Check agar model save hai
     if os.path.exists(MODEL_PATH):
         return tf.keras.models.load_model(MODEL_PATH)
     
-    # 2. Agar model nahi hai, toh CSV se train karein
-    if not os.path.exists(CSV_FILE):
-        st.error(f"❌ Error: '{CSV_FILE}' file nahi mili! Isse app.py ke saath rakhna.")
+    # 2. Agar model nahi hai, toh ZIP se train karein
+    if not os.path.exists(ZIP_FILE):
+        st.error(f"❌ Error: '{ZIP_FILE}' file nahi mili! Isse app.py ke saath rakhna.")
         return None
 
-    with st.spinner(f"⏳ Training Model from {CSV_FILE}... (Thaba time lega)"):
+    with st.spinner(f"⏳ Unzipping & Training from {ZIP_FILE}... (Thaba time lega)"):
         try:
-            # A. CSV Load karein
-            df = pd.read_csv(CSV_FILE)
-            
+            # A. ZIP file se CSV read karein
+            with zipfile.ZipFile(ZIP_FILE, 'r') as z:
+                # Zip ke andar ka file name dhundein (assume 'train.csv' hai)
+                file_list = z.namelist()
+                # Agar zip ke andar koi bhi .csv file hai, use pakdo
+                csv_file_name = next((f for f in file_list if f.endswith('.csv')), None)
+                
+                if not csv_file_name:
+                    st.error("ZIP file mein koi CSV nahi mili.")
+                    return None
+
+                # CSV ko Pandas mein load karein
+                with z.open(csv_file_name) as f:
+                    df = pd.read_csv(f)
+
             # B. Data Preprocessing
-            # Maan rahe hain ki 0th column 'Label' hai aur baaki 'Pixels' hain
-            # Agar aapki CSV mein Label last mein hai, toh .iloc[:, 0] ko .iloc[:, -1] se replace karein
+            # Maan rahe hain: 0th column = Label, Baaki = Pixels
+            # (Agar label last mein hai to .iloc[:, 0] ko .iloc[:, -1] se replace karein)
             y_data = df.iloc[:, 0].values
             x_data = df.iloc[:, 1:].values 
 
-            # Reshape: Flat pixels (784) ko Image (28, 28, 1) mein convert karein
+            # Reshape (784 pixels -> 28x28x1 Image)
             x_data = x_data.reshape(-1, 28, 28, 1)
             
             # Normalize (0-1)
             x_data = x_data / 255.0
 
-            # C. Train/Test Split (Simple 80-20 split without sklearn)
+            # C. Train/Test Split
             split_index = int(0.8 * len(x_data))
             x_train, x_test = x_data[:split_index], x_data[split_index:]
             y_train, y_test = y_data[:split_index], y_data[split_index:]
@@ -70,20 +83,20 @@ def get_model():
                 layers.MaxPooling2D((2, 2)),
                 layers.Flatten(),
                 layers.Dense(64, activation='relu'),
-                layers.Dense(10, activation='softmax') # 0-9 Output
+                layers.Dense(10, activation='softmax')
             ])
 
             model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
             
-            # E. Model Train (3-5 epochs)
+            # E. Model Train (5 epochs)
             model.fit(x_train, y_train, epochs=5, validation_data=(x_test, y_test), verbose=0)
             
             # F. Save Model
             model.save(MODEL_PATH)
-            st.success(f"✅ Model {CSV_FILE} se train ho gaya aur save ho gaya!")
+            st.success(f"✅ Model {ZIP_FILE} se train ho gaya aur save ho gaya!")
             
         except Exception as e:
-            st.error(f"CSV Load ya Train karne mein error aaya: {e}")
+            st.error(f"Error aaya: {e}")
             return None
             
     return model
@@ -118,13 +131,13 @@ with col2:
     conf_placeholder = st.empty()
     status_placeholder = st.empty()
 
-# --- 5. Prediction Logic ---
+# --- 5. Prediction Logic (With Thresholding Fix) ---
 st.markdown("---")
 st.subheader("📊 Prediction Table")
 
 if st.button("🚀 PREDICT", type="primary"):
     if model is None:
-        st.error("Model load nahi hui. CSV file check karein.")
+        st.error("Model load nahi hui. ZIP file check karein.")
     elif canvas_result.image_data is not None:
         with st.spinner("Analyzing..."):
             # Image Processing
@@ -137,7 +150,7 @@ if st.button("🚀 PREDICT", type="primary"):
             img_array = 255 - img_array 
             img_array = img_array / 255.0
             
-            # Thresholding (Fix for multi-color predictions)
+            # --- FIX: Thresholding (Color ko Black/White mein convert) ---
             img_array = (img_array > 0.4).astype('float32')
             
             # Reshape
